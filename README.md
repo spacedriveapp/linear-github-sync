@@ -14,6 +14,6 @@ pnpm i
 vercel dev
 ```
 
-Before you've started the server make sure to fill out the information in the `.env` file, if you don't know how click [here](https://github.com/spacedriveapp/linear-github-sync/wiki).
+Before you've started the server make sure to fill out the information in the `.env` file, if you don't know how click [here](https://github.com/spacedriveapp/linear-github-sync/wiki/Setup).
 
 Please feel free to join our [Discord](https://discord.gg/XzDj6gXf28) or create an issue on this repository if you need any help.
