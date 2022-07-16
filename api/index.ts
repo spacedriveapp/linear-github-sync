@@ -836,8 +836,6 @@ export default async (req: VercelRequest, res: VercelResponse) => {
 
             await linear
                 .issueUpdate(syncedIssue.linearIssueId, {
-                    title: title.join(`${syncedIssue.linearIssueNumber}]`),
-                    description: webhookPayload.issue.body,
                     stateId:
                         webhookPayload.issue.state_reason === "not_planned"
                             ? LINEAR_CANCELED_STATE_ID
