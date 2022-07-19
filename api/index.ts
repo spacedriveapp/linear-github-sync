@@ -89,7 +89,11 @@ export default async (req: VercelRequest, res: VercelResponse) => {
                     )
                     .body({
                         title: `[${webhookPayload.data.team.key}-${webhookPayload.data.number}] ${webhookPayload.data.title}`,
-                        body: `${webhookPayload.data.description}\n<sub>${issueCreator.name} on Linear</sub>`
+                        body: `${webhookPayload.data.description}${
+                            issueCreator.id !== process.env.LINEAR_USER_ID
+                                ? `\n<sub>${issueCreator.name} on Linear</sub>`
+                                : ""
+                        }`
                     })
                     .send();
 
@@ -131,52 +135,6 @@ export default async (req: VercelRequest, res: VercelResponse) => {
                     );
 
                 await Promise.all([
-                    ...linearComments.map(commentObject => {
-                        if (!commentObject) return;
-
-                        const { comment, user } = commentObject;
-
-                        return petitio(
-                            `https://api.github.com/repos/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/issues/${createdIssueData.number}/comments`,
-                            "POST"
-                        )
-                            .header(
-                                "User-Agent",
-                                `${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}, linear-github-sync`
-                            )
-                            .header(
-                                "Authorization",
-                                `token ${process.env.GITHUB_API_KEY}`
-                            )
-                            .body({
-                                body: `${comment.body}\n<sub>${user.name} on Linear</sub>`
-                            })
-                            .send()
-                            .then(commentResponse => {
-                                if (commentResponse.statusCode !== 201)
-                                    console.log(
-                                        `Failed to create GitHub comment for ${
-                                            webhookPayload.data.team.key
-                                        }-${webhookPayload.data.number} [${
-                                            webhookPayload.data.id
-                                        }] on GitHub issue #${
-                                            createdIssueData.number
-                                        } [${
-                                            createdIssueData.id
-                                        }], received status code ${
-                                            createdIssueResponse.statusCode
-                                        }, body of ${JSON.stringify(
-                                            commentResponse.json(),
-                                            null,
-                                            4
-                                        )}.`
-                                    );
-                                else
-                                    console.log(
-                                        `Created comment on GitHub issue #${createdIssueData.number} [${createdIssueData.id}] for Linear issue ${webhookPayload.data.team.key}-${webhookPayload.data.number}.`
-                                    );
-                            });
-                    }),
                     petitio("https://api.linear.app/graphql", "POST")
                         .header(
                             "Authorization",
@@ -185,19 +143,19 @@ export default async (req: VercelRequest, res: VercelResponse) => {
                         .header("Content-Type", "application/json")
                         .body({
                             query: `mutation {
-                            attachmentCreate(input:{
-                                issueId: "${webhookPayload.data.id}"
-                                title: "GitHub Issue #${createdIssueData.number}"
-                                subtitle: "Synchronized"
-                                url: "https://github.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/issues/${createdIssueData.number}"
-                                iconUrl: "https://cdn.discordapp.com/attachments/937628023497297930/988735284504043520/github.png"
-                            }) {
-                                success
-                                attachment {
-                                    id
+                                attachmentCreate(input:{
+                                    issueId: "${webhookPayload.data.id}"
+                                    title: "GitHub Issue #${createdIssueData.number}"
+                                    subtitle: "Synchronized"
+                                    url: "https://github.com/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/issues/${createdIssueData.number}"
+                                    iconUrl: "https://cdn.discordapp.com/attachments/937628023497297930/988735284504043520/github.png"
+                                }) {
+                                    success
+                                    attachment {
+                                        id
+                                    }
                                 }
-                            }
-                        }`
+                            }`
                         })
                         .send()
                         .then(attachmentResponse => {
@@ -244,6 +202,53 @@ export default async (req: VercelRequest, res: VercelResponse) => {
                         }
                     })
                 ] as Promise<any>[]);
+
+                for (const linearComment of linearComments) {
+                    if (!linearComment) continue;
+
+                    const { comment, user } = linearComment;
+
+                    await petitio(
+                        `https://api.github.com/repos/${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}/issues/${createdIssueData.number}/comments`,
+                        "POST"
+                    )
+                        .header(
+                            "User-Agent",
+                            `${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}, linear-github-sync`
+                        )
+                        .header(
+                            "Authorization",
+                            `token ${process.env.GITHUB_API_KEY}`
+                        )
+                        .body({
+                            body: `${comment.body}\n<sub>${user.name} on Linear</sub>`
+                        })
+                        .send()
+                        .then(commentResponse => {
+                            if (commentResponse.statusCode !== 201)
+                                console.log(
+                                    `Failed to create GitHub comment for ${
+                                        webhookPayload.data.team.key
+                                    }-${webhookPayload.data.number} [${
+                                        webhookPayload.data.id
+                                    }] on GitHub issue #${
+                                        createdIssueData.number
+                                    } [${
+                                        createdIssueData.id
+                                    }], received status code ${
+                                        createdIssueResponse.statusCode
+                                    }, body of ${JSON.stringify(
+                                        commentResponse.json(),
+                                        null,
+                                        4
+                                    )}.`
+                                );
+                            else
+                                console.log(
+                                    `Created comment on GitHub issue #${createdIssueData.number} [${createdIssueData.id}] for Linear issue ${webhookPayload.data.team.key}-${webhookPayload.data.number}.`
+                                );
+                        });
+                }
             }
 
             if (webhookPayload.updatedFrom.title) {
@@ -344,9 +349,9 @@ export default async (req: VercelRequest, res: VercelResponse) => {
                     )
                     .body({
                         body: `${webhookPayload.data.description}${
-                            issueCreator.id === process.env.LINEAR_USER_ID
-                                ? ""
-                                : `\n<sub>${issueCreator.name} on Linear</sub>`
+                            issueCreator.id !== process.env.LINEAR_USER_ID
+                                ? `\n<sub>${issueCreator.name} on Linear</sub>`
+                                : ""
                         }`
                     })
                     .send()
@@ -587,7 +592,11 @@ export default async (req: VercelRequest, res: VercelResponse) => {
                     )
                     .body({
                         title: `[${webhookPayload.data.team.key}-${webhookPayload.data.number}] ${webhookPayload.data.title}`,
-                        body: `${webhookPayload.data.description}\n<sub>${issueCreator.name} on Linear</sub>`
+                        body: `${webhookPayload.data.description}${
+                            issueCreator.id !== process.env.LINEAR_USER_ID
+                                ? `\n<sub>${issueCreator.name} on Linear</sub>`
+                                : ""
+                        }`
                     })
                     .send();
 
